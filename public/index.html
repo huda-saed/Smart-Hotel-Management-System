@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Hotel</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>:root{--navy:#0b1f3a;--gold:#c9a24b}body{background:#f4f6fa}.side{background:var(--navy);min-height:100vh}.side .nav-link{color:#cfd8e6}
+.side .nav-link.active,.side .nav-link:hover{color:var(--gold)}.brand{color:var(--gold);font-weight:700;letter-spacing:.05em}.card-stat{border-left:4px solid var(--gold)}
+.btn-gold{background:var(--gold);color:var(--navy);border:0}@media print{body>*:not(#printArea){display:none!important}}</style></head><body>
+<div id="login" class="container" style="max-width:380px;margin-top:12vh"><div class="card p-4 shadow"><h4 class="brand text-center" style="background:var(--navy);padding:.6rem;border-radius:.4rem">SMART HOTEL</h4>
+<input id="u" class="form-control mb-2" placeholder="Username"><input id="p" type="password" class="form-control mb-2" placeholder="Password">
+<button class="btn btn-gold" onclick="login()">Sign in</button><div id="lerr" class="text-danger small mt-2"></div></div></div>
+<div id="app" class="d-none"><div class="row g-0"><nav class="col-12 col-md-2 side p-3"><div class="brand mb-3">SMART HOTEL</div><div id="nav" class="nav flex-md-column"></div>
+<div class="small text-secondary mt-3" id="who"></div><a href="#" class="btn btn-sm btn-outline-light mt-2" onclick="logout()">Logout</a></nav>
+<main class="col-12 col-md-10 p-3"><div id="alert"></div><div id="view"></div></main></div></div>
+<div class="modal fade" id="m"><div class="modal-dialog"><form class="modal-content" onsubmit="return false"><div class="modal-header"><h5 id="mt"></h5></div><div class="modal-body" id="mb"></div>
+<div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-gold" id="ms">Save</button></div></form></div></div><div id="printArea"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);let T=localStorage.t,ME=JSON.parse(localStorage.me||'null');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,m='GET',b){const r=await fetch('/api/'+path,{method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+T},body:b?JSON.stringify(b):undefined});
+ const d=await r.json().catch(()=>({}));if(r.status===401&&T)logout();if(!r.ok)throw new Error(d.error||'Error');return d;}
+function note(msg,ok){$('alert').innerHTML=`<div class="alert alert-${ok?'success':'danger'}">${esc(msg)}</div>`;setTimeout(()=>$('alert').innerHTML='',4000);}
+const act=async f=>{try{await f()}catch(e){note(e.message)}};
+async function login(){try{const d=await(await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('u').value,password:$('p').value})})).json();
+ if(!d.token)throw new Error(d.error);T=d.token;ME=d.user;localStorage.t=T;localStorage.me=JSON.stringify(ME);start();}catch(e){$('lerr').textContent=e.message}}
+function logout(){localStorage.clear();location.reload()}
+const M=new bootstrap.Modal($('m'));
+function form(title,fields,vals,onSave){$('mt').textContent=title;$('mb').innerHTML=fields.map(f=>`<label class="form-label small mb-0">${f.l}</label>`+(f.opts?`<select class="form-select mb-2" id="f_${f.k}">${f.opts.map(o=>`<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select>`:`<input class="form-control mb-2" id="f_${f.k}" type="${f.t||'text'}">`)).join('');
+ fields.forEach(f=>$('f_'+f.k).value=vals?.[f.k]??'');$('ms').onclick=()=>act(async()=>{const o={};fields.forEach(f=>o[f.k]=$('f_'+f.k).value);await onSave(o);M.hide()});M.show();}
+const table=(cols,rows,actions)=>`<div class="table-responsive"><table class="table table-sm table-hover bg-white"><thead><tr>${cols.map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${rows.map((r,i)=>`<tr>${cols.map(c=>`<td>${esc(r[c[0]])}</td>`).join('')}<td class="text-nowrap">${actions(r,i)}</td></tr>`).join('')}</tbody></table></div>`;
+const btn=(t,fn,c='outline-primary')=>`<button class="btn btn-sm btn-${c} me-1" onclick="act(()=>${fn})">${t}</button>`;
+const bar=(title,add,srch,extra='')=>`<div class="d-flex flex-wrap gap-2 mb-3"><h4 class="me-auto">${title}</h4>${extra}${srch?`<input id="q" class="form-control w-auto" placeholder="Search" oninput="clearTimeout(window.tm);window.tm=setTimeout(()=>go(cur),300)">`:''}${add?`<button class="btn btn-gold" onclick="${add}">+ Add</button>`:''}</div>`;
+const q=()=>encodeURIComponent($('q')?.value||'');
+const V={
+ async Dashboard(){const d=await api('billing/dashboard');const c=[['Total rooms',d.rooms],['Available',d.available],['Occupied',d.occupied],['Reserved',d.reserved],['Customers',d.customers],["Today's check-ins",d.checkins_today],["Today's check-outs",d.checkouts_today],['Revenue today','$'+d.revenue_today],['Revenue this month','$'+d.revenue_month],['Total revenue','$'+d.revenue_total]];
+  return `<h4>Dashboard</h4><div class="row g-3">${c.map(x=>`<div class="col-6 col-lg-3"><div class="card card-stat p-3"><div class="small text-muted">${x[0]}</div><div class="fs-4">${x[1]}</div></div></div>`).join('')}</div>`},
+ async Rooms(){const rows=await api('rooms?q='+q()+'&status='+($('fs')?.value||''));window.R=rows;const mg=['super_admin','manager'].includes(ME.role);
+  const st=['','Available','Occupied','Reserved','Maintenance','Cleaning'];
+  return bar('Rooms',mg&&'roomForm()',1,`<select id="fs" class="form-select w-auto" onchange="go(cur)">${st.map(s=>`<option ${$('fs')?.value===s?'selected':''}>${s}</option>`)}</select>`)+table([['room_number','Room'],['type','Type'],['price','Price'],['status','Status'],['description','Description']],rows,(r,i)=>
+   mg?btn('Edit',`roomForm(R[${i}])`)+btn('Delete',`del('rooms',${r.id})`,'outline-danger'):ME.role==='housekeeping'?btn('Set status',`roomForm(R[${i}],1)`):'')},
+ async Customers(){const rows=await api('customers?q='+q());window.C=rows;
+  return bar('Customers',"custForm()",1)+table([['id','#'],['full_name','Name'],['phone','Phone'],['email','Email'],['id_number','ID']],rows,(r,i)=>btn('Edit',`custForm(C[${i}])`)+btn('History',`hist(${r.id})`,'outline-secondary')+(ME.role==='manager'||ME.role==='super_admin'?btn('Delete',`del('customers',${r.id})`,'outline-danger'):''))},
+ async Bookings(){const rows=await api('bookings?q='+q());window.B=rows;const rc=['manager','receptionist','super_admin'].includes(ME.role);
+  return bar('Bookings',rc&&'bookForm()',1)+table([['id','#'],['customer','Guest'],['room_number','Room'],['check_in','In'],['check_out','Out'],['total_price','Total'],['balance','Balance'],['status','Status']],rows,r=>
+   (rc&&r.status==='Confirmed'?btn('Check-in',`stay('checkin',${r.id})`,'success')+btn('Cancel',`cancel(${r.id})`,'outline-danger'):'')+(rc&&r.status==='CheckedIn'?btn('Check-out',`stay('checkout',${r.id})`,'warning'):'')+btn('Invoice',`invoice(${r.id})`,'outline-secondary'))},
+ async Payments(){const rows=await api('billing/payments');return `<h4>Payments</h4>`+table([['id','#'],['booking_id','Booking'],['customer','Guest'],['amount','Amount'],['method','Method'],['reference','Ref'],['paid_at','Date']],rows,()=>'')}
+};
+const NAV={super_admin:Object.keys(V),manager:Object.keys(V),receptionist:['Dashboard','Rooms','Customers','Bookings'],accountant:['Dashboard','Bookings','Payments'],housekeeping:['Dashboard','Rooms'],restaurant:['Dashboard']};
+let cur;async function go(v){cur=v;document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.textContent===v));await act(async()=>{$('view').innerHTML=await V[v]();if($('q')&&window.lastQ)$('q').value=window.lastQ})}
+document.addEventListener('input',e=>{if(e.target.id==='q')window.lastQ=e.target.value});
+async function del(p,id){if(confirm('Delete?')){await api(p+'/'+id,'DELETE');note('Deleted',1);go(cur)}}
+async function roomForm(r,hk){const t=await Promise.resolve(['Single','Double','Twin','Deluxe','Executive','Suite'].map((n,i)=>[i+1,n]));
+ const f=hk?[{k:'status',l:'Status',opts:['Available','Occupied','Reserved','Maintenance','Cleaning'].map(x=>[x,x])}]:[{k:'room_number',l:'Room number'},{k:'type_id',l:'Type',opts:t},{k:'price',l:'Price',t:'number'},{k:'description',l:'Description'},{k:'status',l:'Status',opts:['Available','Reserved','Maintenance','Cleaning','Occupied'].map(x=>[x,x])}];
+ form(r?'Edit room':'Add room',f,r,async o=>{await api('rooms'+(r?'/'+r.id:''),r?'PUT':'POST',o);note('Saved',1);go(cur)})}
+function custForm(c){form(c?'Edit customer':'Add customer',[{k:'full_name',l:'Full name'},{k:'phone',l:'Phone'},{k:'email',l:'Email',t:'email'},{k:'address',l:'Address'},{k:'id_number',l:'ID / passport'}],c,async o=>{await api('customers'+(c?'/'+c.id:''),c?'PUT':'POST',o);note('Saved',1);go(cur)})}
+async function hist(id){const h=await api('customers/'+id+'/bookings');alert(h.length?h.map(b=>`#${b.id} room ${b.room_number} ${b.check_in}→${b.check_out} ${b.status}`).join('\n'):'No bookings')}
+async function bookForm(){const cs=await api('customers'),rs=await api('rooms');
+ form('New booking',[{k:'customer_id',l:'Customer',opts:cs.map(c=>[c.id,c.full_name])},{k:'room_id',l:'Room',opts:rs.map(r=>[r.id,`${r.room_number} ${r.type} $${r.price}`])},{k:'check_in',l:'Check-in',t:'date'},{k:'check_out',l:'Check-out',t:'date'},{k:'guests',l:'Guests',t:'number'}],{guests:1},
+ async o=>{const d=await api('bookings','POST',o);note('Booked. Total $'+d.total,1);go(cur)})}
+async function cancel(id){if(confirm('Cancel booking?')){await api('bookings/'+id+'/cancel','PUT');note('Cancelled',1);go(cur)}}
+async function stay(a,id){await api('stay/'+a+'/'+id,'POST');note(a+' done',1);go(cur)}
+async function invoice(id){const i=await api('billing/invoice/'+id);const can=['manager','receptionist','accountant','super_admin'].includes(ME.role);
+ $('mt').textContent='Invoice #'+i.id;$('mb').innerHTML=`<p>${esc(i.customer)} · Room ${esc(i.room_number)}<br>${i.check_in} → ${i.check_out}</p><p>Total $${i.total} · Paid $${i.paid} · <b>Balance $${i.balance}</b></p>`+
+ (i.payments.length?`<ul>${i.payments.map(p=>`<li>$${p.amount} ${p.method} ${esc(p.reference||'')} (${p.paid_at})</li>`).join('')}</ul>`:'')+
+ (can&&i.balance>0?`<input id="pa" type="number" step="0.01" class="form-control mb-2" placeholder="Amount"><select id="pm" class="form-select mb-2"><option>Cash</option><option>Card</option></select><input id="pr" class="form-control" placeholder="Reference (demo)">`:'');
+ $('ms').textContent=can&&i.balance>0?'Record payment':'Print';$('ms').onclick=()=>act(async()=>{if(can&&i.balance>0){await api('billing/pay','POST',{invoice_id:i.id,amount:$('pa').value,method:$('pm').value,reference:$('pr').value});note('Payment recorded',1);M.hide();go(cur)}
+ else{$('printArea').innerHTML=$('mb').innerHTML;window.print()}});M.show();$('m').addEventListener('hidden.bs.modal',()=>$('ms').textContent='Save',{once:true})}
+function start(){$('login').classList.add('d-none');$('app').classList.remove('d-none');$('who').textContent=ME.name+' ('+ME.role+')';
+ $('nav').innerHTML=NAV[ME.role].map(v=>`<a class="nav-link" href="#" onclick="go('${v}');return false">${v}</a>`).join('');go('Dashboard')}
+if(T&&ME)start();
+</script></body></html>
